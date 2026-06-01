@@ -18,6 +18,12 @@ pub struct GovernanceContract {
     voting_period: u64,
     /// Execution delay in seconds
     execution_delay: u64,
+    /// Minimum voting power required to create a proposal
+    proposal_threshold: u64,
+    /// Next proposal ID
+    next_proposal_id: u64,
+    /// Proposals stored by ID
+    proposals: std::collections::BTreeMap<u64, Proposal>,
     /// Contract address
     address: Option<Address>,
     /// Internal proposal map
@@ -35,12 +41,16 @@ impl GovernanceContract {
         quorum_percentage: u32,
         voting_period: u64,
         execution_delay: u64,
+        proposal_threshold: u64,
     ) -> Self {
         Self {
             governance_token,
             quorum_percentage,
             voting_period,
             execution_delay,
+            proposal_threshold,
+            next_proposal_id: 1,
+            proposals: std::collections::BTreeMap::new(),
             address: None,
             proposals: HashMap::new(),
             votes: HashMap::new(),
@@ -55,6 +65,7 @@ impl GovernanceContract {
             quorum_percentage: self.quorum_percentage,
             voting_period: self.voting_period,
             execution_delay: self.execution_delay,
+            proposal_threshold: self.proposal_threshold,
         }
     }
 
@@ -72,7 +83,12 @@ impl GovernanceContract {
         title: String,
         description: String,
         actions: Vec<ProposalAction>,
+        now: u64,
     ) -> Result<u64, String> {
+        if self.get_voting_power(proposer.clone()) < self.proposal_threshold {
+            return Err("Insufficient voting power to create a proposal".to_string());
+        }
+
         if title.is_empty() || title.len() > 200 {
             return Err("Title must be 1-200 characters".to_string());
         }
@@ -295,6 +311,7 @@ pub struct GovernanceInfo {
     pub quorum_percentage: u32,
     pub voting_period: u64,
     pub execution_delay: u64,
+    pub proposal_threshold: u64,
 }
 
 /// Proposal structure
@@ -353,8 +370,6 @@ pub enum ActionType {
     /// Pause contract
     PauseContract,
     /// Unpause contract
-    UnpauseContract,
-    /// Custom action
     Custom(String),
 }
 
@@ -386,12 +401,14 @@ mod tests {
             5000, // 50% quorum
             604800, // 7 days voting period
             86400, // 1 day execution delay
+            100_000, // 100k tokens threshold
         );
 
         assert_eq!(contract.governance_token, "GOV_TOKEN");
         assert_eq!(contract.quorum_percentage, 5000);
         assert_eq!(contract.voting_period, 604800);
         assert_eq!(contract.execution_delay, 86400);
+        assert_eq!(contract.proposal_threshold, 100_000);
     }
 
     #[test]
@@ -401,6 +418,7 @@ mod tests {
             5000,
             604800,
             86400,
+            0, // 0 threshold for easy testing
         );
         let proposer = Address::generate(&Env::default());
 
@@ -414,14 +432,50 @@ mod tests {
 
         let proposal_id = contract
             .create_proposal(
-                proposer,
+                proposer.clone(),
                 "Test Proposal".to_string(),
                 "This is a test proposal".to_string(),
                 actions,
+                100, // now
             )
             .unwrap();
 
         assert_eq!(proposal_id, 1);
+        let proposal = contract.get_proposal(proposal_id).unwrap();
+        assert_eq!(proposal.title, "Test Proposal");
+        assert_eq!(proposal.proposer, proposer);
+        assert_eq!(proposal.created_at, 100);
+        assert_eq!(proposal.voting_deadline, 100 + 604800);
+    }
+
+    #[test]
+    fn test_create_proposal_ineligible() {
+        let mut contract = GovernanceContract::new(
+            "GOV_TOKEN".to_string(),
+            5000,
+            604800,
+            86400,
+            100_000, // High threshold
+        );
+        let proposer = Address::generate(&Env::default());
+        let actions = vec![ProposalAction {
+            action_type: ActionType::Transfer,
+            target: "TOKEN_CONTRACT".to_string(),
+            function: "transfer".to_string(),
+            parameters: vec![],
+            value: None,
+        }];
+
+        let result = contract.create_proposal(
+            proposer,
+            "Test Proposal".to_string(),
+            "This is a test proposal".to_string(),
+            actions,
+            100,
+        );
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Insufficient voting power to create a proposal");
     }
 
     #[test]
@@ -431,6 +485,7 @@ mod tests {
             5000,
             604800,
             86400,
+            0,
         );
         let proposer = Address::generate(&Env::default());
         let actions = vec![];
@@ -440,6 +495,7 @@ mod tests {
             "".to_string(), // Empty title
             "This is a test proposal".to_string(),
             actions,
+            100,
         );
 
         assert!(result.is_err());
@@ -453,6 +509,7 @@ mod tests {
             5000,
             604800,
             86400,
+            0,
         );
         let voter = Address::generate(&Env::default());
 
@@ -483,6 +540,7 @@ mod tests {
             5000,
             604800,
             86400,
+            0,
         );
         let voter = Address::generate(&Env::default());
 
@@ -498,6 +556,7 @@ mod tests {
             5000,
             604800,
             86400,
+            100_000,
         );
 
         contract
@@ -516,6 +575,7 @@ mod tests {
             5000,
             604800,
             86400,
+            100_000,
         );
 
         let result = contract.update_parameters(15000, 604800, 86400); // 150% quorum

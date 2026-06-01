@@ -6,6 +6,8 @@ A comprehensive DeFi toolkit for building decentralized finance applications on 
 
 - **🪙 Token Contracts**: Complete ERC-20-like token implementation on Stellar
 - **💧 Liquidity Pools**: Automated market maker (AMM) liquidity pools
+- **💰 Lending & Borrowing**: Collateralized lending protocol with liquidations
+- **🔒 Staking & Rewards**: Time-based staking with proportional reward distribution
 - **🌾 Yield Farming**: Staking and reward distribution mechanisms
 - **🌉 Cross-chain Bridges**: Asset transfer between different blockchains
 - **🏛️ Governance**: Decentralized governance and voting systems
@@ -40,6 +42,39 @@ cargo build --release
 
 ### CLI Usage
 
+#### Quote Interest Rate
+
+```bash
+stellar-defi-cli quote-rate --utilization-bps 8000
+```
+
+#### Check if a Position is Liquidatable
+
+```bash
+stellar-defi-cli check-liquidation \
+  --borrower "GCBORROWER456" \
+  --debt-asset "USDC" \
+  --collateral-asset "XLM" \
+  --debt-price 1000000000000000000 \
+  --collateral-price 500000000000000000
+```
+
+#### Liquidate an Undercollateralized Position
+
+```bash
+stellar-defi-cli liquidate \
+  --liquidator "GCLIQUIDATOR123" \
+  --borrower "GCBORROWER456" \
+  --debt-asset "USDC" \
+  --collateral-asset "XLM" \
+  --repay-amount 1000000000000000000000 \
+  --debt-price 1000000000000000000 \
+  --collateral-price 500000000000000000 \
+  --dry-run
+```
+
+For detailed documentation on liquidation commands, see [CLI_LIQUIDATION.md](CLI_LIQUIDATION.md).
+
 #### Deploy a New Token
 
 ```bash
@@ -55,6 +90,14 @@ stellar-defi-cli deploy-token \
 stellar-defi-cli create-pool \
   --token-a "TOKEN_A_CONTRACT_ID" \
   --token-b "TOKEN_B_CONTRACT_ID"
+```
+
+#### Stake Tokens
+
+```bash
+stellar-defi-cli stake \
+  --contract-id "STAKING_CONTRACT_ID" \
+  --amount 1000
 ```
 
 #### Get Contract Information
@@ -110,6 +153,45 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 ```
+
+#### Example: Stake Tokens and Earn Rewards
+
+```rust
+use soroban_sdk::{Env, Address};
+use stellar_defi_toolkit::StakingContract;
+
+fn main() {
+    let env = Env::default();
+    env.mock_all_auths();
+    
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    
+    // Initialize staking contract
+    let staking = StakingContractClient::new(&env, &contract_id);
+    staking.initialize(
+        &admin,
+        &staking_token_address,
+        &reward_token_address,
+        &17280, // 1 day reward period
+    );
+    
+    // Set rewards
+    staking.notify_reward_amount(&admin, &10_000_000_000);
+    
+    // User stakes tokens
+    staking.stake(&user, &1_000_000_000);
+    
+    // Check earned rewards
+    let earned = staking.get_earned(&user);
+    println!("Earned rewards: {}", earned);
+    
+    // Claim rewards
+    staking.claim_rewards(&user);
+}
+```
+
+For more details, see [STAKING_README.md](STAKING_README.md) and [docs/staking_contract.md](docs/staking_contract.md).
 
 ## 🏗️ Project Structure
 
@@ -199,7 +281,7 @@ at your option.
 ### Phase 1: Core DeFi Components (Q1 2024)
 - [x] Token contracts with ERC-20-like functionality
 - [x] Liquidity pools with AMM functionality
-- [x] Staking contracts with reward distribution
+- [x] Staking contracts with time-based reward distribution
 - [x] Basic CLI tools for contract deployment
 - [x] Comprehensive testing suite
 
