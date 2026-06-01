@@ -6,4 +6,4 @@ pub mod oracle;
 
 pub use circuit_breaker::CircuitBreakerContract;
 pub use lending::LendingProtocol;
-pub use oracle::PriceOracle;
+pub use oracle::{PriceOracle, PriceOracleSim};
