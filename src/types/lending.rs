@@ -34,6 +34,12 @@ pub struct ReserveConfig {
     pub borrow_enabled: bool,
     pub deposit_enabled: bool,
     pub flash_loan_enabled: bool,
+    /// Maximum total amount that can be supplied for this asset (0 = no cap).
+    pub supply_cap: i128,
+    /// Maximum total amount that can be borrowed for this asset (0 = no cap).
+    pub borrow_cap: i128,
+    /// Per-asset interest rate model. When `None` the protocol-level default is used.
+    pub interest_rate_model: Option<InterestRateModel>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
